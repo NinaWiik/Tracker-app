@@ -1,17 +1,22 @@
-import { AuthProvider } from "@/lib/auth-context";
-import { Stack, useRouter } from "expo-router";
+import { AuthProvider, useAuth } from "@/lib/auth-context";
+import { Stack, useRouter, useSegments } from "expo-router";
 import { useEffect } from "react";
 
 function RouteGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
-  const isAuth = false;
+  const { user, isLoadingUser } = useAuth();
+  const segments = useSegments();
+
 
   useEffect(() => {
     // delay was set to get over the error, error: Attempted to navigate before mounting the Root Layout component
      const timerId = setTimeout(() => {
-      if (!isAuth) {
+      const inAuthGroup = segments[0] === "auth";
+      if (!user && !inAuthGroup && !isLoadingUser) {
         router.replace("/auth");
+      } else if (user && inAuthGroup && !isLoadingUser) {
+        router.replace("/");
       }
     }, 500); // 500 milliseconds = 2 second delay
 
@@ -19,7 +24,7 @@ function RouteGuard({ children }: { children: React.ReactNode }) {
     return () => {
       clearTimeout(timerId);
     };
-  }, []);
+  }, [user, segments]);
 
   return <>{children}</>;
 }
