@@ -38,7 +38,7 @@ export default function AddHabitScreen() {
         setIsSubmitting(true);
         try {
             if (!DATABASE_ID || !HABITS_DATABASE_ID) {
-                setError(`Database configuration is missing. Please check your .env file. DATABASE_ID: ${DATABASE_ID || 'undefined'}, HABITS_DATABASE_ID: ${HABITS_DATABASE_ID || 'undefined'}`);
+                setError(`Database configuration is missing.`);
                 setIsSubmitting(false);
                 return;
             }
@@ -58,8 +58,6 @@ export default function AddHabitScreen() {
                     created_at: new Date().toISOString(),
                 },
             };
-
-            console.log("Creating row with:", { databaseId: DATABASE_ID, tableId: HABITS_DATABASE_ID, rowId });
 
             await tablesDB.createRow(rowData);
             
