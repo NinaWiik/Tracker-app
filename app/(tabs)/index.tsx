@@ -6,12 +6,15 @@ import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
 import { Query } from "react-native-appwrite";
+import { Swipeable } from "react-native-gesture-handler";
 import { Button, Surface, Text } from "react-native-paper";
 
 export default function Index() {
   const { signOut, user } = useAuth();
 
   const [habits, setHabits] = useState<Habit[]>([]);
+
+  const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
   
   // Ref to store the unsubscribe function for the real-time subscription
   // This allows us to clean up the subscription when needed
@@ -123,6 +126,19 @@ export default function Index() {
     console.log('Habits state updated:', habits);
   }, [habits]);
 
+  const renderRightActions = () => (
+    <View style={styles.swipeRightActions}>
+      <MaterialCommunityIcons name="check-circle-outline" size={32} color="#fff" />
+    </View>
+  );
+  
+  const renderLeftActions = () => 
+    (
+      <View style={styles.swipeLeftActions}>
+        <MaterialCommunityIcons name="trash-can-outline" size={32} color="#fff" />
+      </View>
+    );
+
   return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -138,26 +154,37 @@ export default function Index() {
           </Surface>
         ) : (
           habits.map((habit, key) => (
-            <Surface key={key} style={styles.card} elevation={0}>
-              <View style={styles.cardContent}>
-                <Text variant="bodyMedium" style={styles.cardTitle}>{habit.title}</Text>
-                
-                <Text variant="bodyMedium" style={styles.cardDescription}>{habit.description}</Text>
-                
-                <View style={styles.cardFooter}>
-                  <View style={styles.streakBadge}>
-                    <MaterialCommunityIcons name="fire" size={18} color="#ff9800" />
-                    <Text variant="bodyMedium" style={styles.streakText}>{habit.streak_count} days streak</Text>
-                  </View>
+            <Swipeable 
+              ref={(ref) => {
+                swipeableRefs.current[habit.$id] = ref
+                }} 
+                key={key}
+                overshootLeft={false}
+                overshootRight={false}
+                renderRightActions={renderRightActions}
+                renderLeftActions={renderLeftActions}
+                >
+              <Surface style={styles.card} elevation={0}>
+                <View style={styles.cardContent}>
+                  <Text variant="bodyMedium" style={styles.cardTitle}>{habit.title}</Text>
                   
-                  <View style={styles.frequencyBadge}>
-                    <Text variant="bodyMedium" style={styles.frequencyText}>
-                      {habit.frequency.charAt(0).toUpperCase() + habit.frequency.slice(1)}
-                    </Text>
+                  <Text variant="bodyMedium" style={styles.cardDescription}>{habit.description}</Text>
+                  
+                  <View style={styles.cardFooter}>
+                    <View style={styles.streakBadge}>
+                      <MaterialCommunityIcons name="fire" size={18} color="#ff9800" />
+                      <Text variant="bodyMedium" style={styles.streakText}>{habit.streak_count} days streak</Text>
+                    </View>
+                    
+                    <View style={styles.frequencyBadge}>
+                      <Text variant="bodyMedium" style={styles.frequencyText}>
+                        {habit.frequency.charAt(0).toUpperCase() + habit.frequency.slice(1)}
+                      </Text>
+                    </View>
                   </View>
                 </View>
-              </View>
-            </Surface>
+              </Surface>
+            </Swipeable>
             ))
           )}
         </ScrollView>
@@ -241,5 +268,25 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     color: "#666666",
+  },
+  swipeRightActions: {
+    backgroundColor: "#4c8f50",
+    borderRadius: 18,
+    marginBottom: 18,
+    marginTop: 2,
+    paddingRight: 16,
+    justifyContent: "center",
+    alignItems: "flex-end",
+    flex: 1,
+  },
+  swipeLeftActions: {
+    backgroundColor: "#e53935",
+    borderRadius: 18,
+    marginBottom: 18,
+    marginTop: 2,
+    paddingLeft: 16,
+    justifyContent: "center",
+    alignItems: "flex-start",
+    flex: 1,
   },
 });
