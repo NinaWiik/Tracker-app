@@ -126,6 +126,24 @@ export default function Index() {
     console.log('Habits state updated:', habits);
   }, [habits]);
 
+  const handleDeleteHabit = async (id: string) => {
+    try {
+      // Optimistically remove the habit from the UI immediately
+      setHabits((prev) => prev.filter((habit) => habit.$id !== id));
+      
+      // Delete the row from the database
+      await tablesDB.deleteRow({
+        databaseId: DATABASE_ID,
+        tableId: HABITS_DATABASE_ID,
+        rowId: id,
+      });
+    } catch (error) {
+      console.error(error);
+      // If deletion fails, refetch to restore the correct state
+      fetchHabits();
+    }
+  }
+
   const renderRightActions = () => (
     <View style={styles.swipeRightActions}>
       <MaterialCommunityIcons name="check-circle-outline" size={32} color="#fff" />
@@ -163,6 +181,12 @@ export default function Index() {
                 overshootRight={false}
                 renderRightActions={renderRightActions}
                 renderLeftActions={renderLeftActions}
+                onSwipeableOpen={(direction) => {
+                  if (direction === 'left') {
+                    handleDeleteHabit(habit.$id);
+                  }
+                  swipeableRefs.current[habit.$id]?.close();
+                }}
                 >
               <Surface style={styles.card} elevation={0}>
                 <View style={styles.cardContent}>
