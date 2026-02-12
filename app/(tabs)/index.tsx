@@ -1,11 +1,11 @@
-import { client, DATABASE_ID, HABITS_DATABASE_ID, tablesDB } from "@/lib/appwrite";
+import { client, COMPLETED_HABITS_DATABASE_ID, DATABASE_ID, HABITS_DATABASE_ID, tablesDB } from "@/lib/appwrite";
 import { useAuth } from "@/lib/auth-context";
 import { Habit } from "@/types/database.type";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ScrollView, StyleSheet, View } from "react-native";
-import { Query } from "react-native-appwrite";
+import { ID, Query } from "react-native-appwrite";
 import { Swipeable } from "react-native-gesture-handler";
 import { Button, Surface, Text } from "react-native-paper";
 
@@ -144,6 +144,57 @@ export default function Index() {
     }
   }
 
+  const handleCompleteHabit = async (id: string) => {
+    if (!user) return;
+    
+    const habit = habits.find((habit) => habit.$id === id);
+    if (!habit) return;
+    
+    const currentDate = new Date().toISOString();
+    const newStreakCount = habit.streak_count + 1;
+    
+    // Optimistically update the streak count in the UI immediately
+    setHabits((prev) =>
+      prev.map((h) =>
+        h.$id === id
+          ? { ...h, streak_count: newStreakCount, last_completed: currentDate }
+          : h
+      )
+    );
+    
+    try {
+      await tablesDB.createRow({
+        databaseId: DATABASE_ID,
+        tableId: COMPLETED_HABITS_DATABASE_ID,
+        rowId: ID.unique(),
+        data: {
+          habit_id: id,
+          user_id: user.$id,
+          completed_at: currentDate,
+        },
+      });
+      
+      await tablesDB.updateRow({
+        databaseId: DATABASE_ID,
+        tableId: HABITS_DATABASE_ID,
+        rowId: id,
+        data: {
+          streak_count: newStreakCount,
+          last_completed: currentDate,
+        },
+      });
+    } catch (error) {
+      console.error('Error completing habit:', error);
+      // If update fails, revert to the original state
+      setHabits((prev) =>
+        prev.map((h) =>
+          h.$id === id
+            ? { ...h, streak_count: habit.streak_count, last_completed: habit.last_completed }
+            : h
+        )
+      );
+    }
+  }
   const renderRightActions = () => (
     <View style={styles.swipeRightActions}>
       <MaterialCommunityIcons name="check-circle-outline" size={32} color="#fff" />
@@ -184,6 +235,8 @@ export default function Index() {
                 onSwipeableOpen={(direction) => {
                   if (direction === 'left') {
                     handleDeleteHabit(habit.$id);
+                  } else if (direction === 'right') {
+                    handleCompleteHabit(habit.$id);
                   }
                   swipeableRefs.current[habit.$id]?.close();
                 }}

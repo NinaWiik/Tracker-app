@@ -11,3 +11,4 @@ export const tablesDB = new TablesDB(client);
 
 export const DATABASE_ID = process.env.EXPO_PUBLIC_DB_ID!;
 export const HABITS_DATABASE_ID = process.env.EXPO_PUBLIC_DB_HABITS!;
+export const COMPLETED_HABITS_DATABASE_ID = process.env.EXPO_PUBLIC_DB_HABIT_COMPLETIONS!;
