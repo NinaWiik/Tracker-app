@@ -1,6 +1,6 @@
 import { client, COMPLETED_HABITS_DATABASE_ID, DATABASE_ID, HABITS_DATABASE_ID, tablesDB } from "@/lib/appwrite";
 import { useAuth } from "@/lib/auth-context";
-import { Habit } from "@/types/database.type";
+import { Habit, HabitCompletion } from "@/types/database.type";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useFocusEffect } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -13,6 +13,7 @@ export default function Index() {
   const { signOut, user } = useAuth();
 
   const [habits, setHabits] = useState<Habit[]>([]);
+  const [completedHabits, setCompletedHabits] = useState<string[]>([]);
 
   const swipeableRefs = useRef<{ [key: string]: Swipeable | null }>({});
   
@@ -36,12 +37,28 @@ export default function Index() {
       });
       // Update the habits state with the fetched data
       setHabits(habits.rows);
-      console.log('Habits:', habits.rows);
     } catch (error) {
       console.error(error);
     }
   }, [user]);
 
+  const fetchTodayCompletions = useCallback(async () => {
+    if (!user) return;
+    
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const completionsResult = await tablesDB.listRows<HabitCompletion>({
+        databaseId: DATABASE_ID,
+        tableId: COMPLETED_HABITS_DATABASE_ID,
+        queries: [Query.equal("user_id", user.$id), Query.greaterThanEqual("completed_at", today.toISOString())],
+      });
+      const completions = completionsResult.rows as HabitCompletion[]
+      setCompletedHabits(completions.map((completion) => completion.habit_id));
+    } catch (error) {
+      console.error(error);
+    }
+  }, [user]);
   /**
    * Sets up a real-time subscription to listen for changes to habits
    * When a habit is created, updated, or deleted, the UI will update automatically
@@ -51,7 +68,7 @@ export default function Index() {
 
     // Construct the channel name for Appwrite real-time subscription
     // Format: databases.{databaseId}.tables.{tableId}.rows
-    const channel = `databases.${DATABASE_ID}.tables.${HABITS_DATABASE_ID}.rows`;
+    const habitsChannel = `databases.${DATABASE_ID}.tables.${HABITS_DATABASE_ID}.rows`;
     
     // Clean up any existing subscription before creating a new one
     if (unsubscribeRef.current) {
@@ -59,7 +76,7 @@ export default function Index() {
     }
 
     // Subscribe to real-time events on the habits table
-    unsubscribeRef.current = client.subscribe(channel, (response: any) => {
+    unsubscribeRef.current = client.subscribe(habitsChannel, (response: any) => {
       const events = response.events || [];
       
       events.forEach((event: any) => {
@@ -85,7 +102,28 @@ export default function Index() {
         }
       });
     });
-  }, [user]);
+
+    const completionsChannel = `databases.${DATABASE_ID}.tables.${COMPLETED_HABITS_DATABASE_ID}.rows`;
+    unsubscribeRef.current = client.subscribe(completionsChannel, (response: any) => {
+      const events = response.events || [];
+      events.forEach((event: any) => {
+        const payload = event.payload;
+        if (!payload || payload.user_id !== user.$id) return;
+        const eventType = event.events?.[0] || '';
+        
+        if (eventType.includes('create')) {
+          // When a completion is created, add it to the list (avoid duplicates)
+          setCompletedHabits((prev) => 
+            prev.includes(payload.habit_id) 
+              ? prev 
+              : [...prev, payload.habit_id]
+          );
+        }
+        // Refetch to ensure we have the latest completions for today
+        fetchTodayCompletions();
+      });
+    });
+  }, [user, fetchTodayCompletions]);
 
   /**
    * Main effect: Initialize data fetching and subscription when user is available
@@ -96,6 +134,7 @@ export default function Index() {
   useEffect(() => {
     if (user) {
       fetchHabits();
+      fetchTodayCompletions();
       setupSubscription();
     }
 
@@ -105,7 +144,7 @@ export default function Index() {
         unsubscribeRef.current = null;
       }
     };
-  }, [user, fetchHabits, setupSubscription]);
+  }, [user, fetchHabits, setupSubscription, fetchTodayCompletions]);
 
   /**
    * Refetch habits when the screen comes into focus
@@ -118,13 +157,6 @@ export default function Index() {
     }, [user, fetchHabits])
   );
 
-  /**
-   * Debug effect: Log habits whenever the state changes
-   * Useful for tracking state updates during development
-   */
-  useEffect(() => {
-    console.log('Habits state updated:', habits);
-  }, [habits]);
 
   const handleDeleteHabit = async (id: string) => {
     try {
@@ -145,13 +177,16 @@ export default function Index() {
   }
 
   const handleCompleteHabit = async (id: string) => {
-    if (!user) return;
+    if (!user || completedHabits.includes(id)) return;
     
     const habit = habits.find((habit) => habit.$id === id);
     if (!habit) return;
     
     const currentDate = new Date().toISOString();
     const newStreakCount = habit.streak_count + 1;
+    
+    // Optimistically add to completed habits to prevent duplicate completions
+    setCompletedHabits((prev) => [...prev, id]);
     
     // Optimistically update the streak count in the UI immediately
     setHabits((prev) =>
@@ -186,6 +221,7 @@ export default function Index() {
     } catch (error) {
       console.error('Error completing habit:', error);
       // If update fails, revert to the original state
+      setCompletedHabits((prev) => prev.filter((habitId) => habitId !== id));
       setHabits((prev) =>
         prev.map((h) =>
           h.$id === id
@@ -195,9 +231,18 @@ export default function Index() {
       );
     }
   }
-  const renderRightActions = () => (
+
+  const isHabitCompleted = (habitId: string) => {
+    return completedHabits.includes(habitId);
+  }
+
+  const renderRightActions = (habitId: string) => (
     <View style={styles.swipeRightActions}>
-      <MaterialCommunityIcons name="check-circle-outline" size={32} color="#fff" />
+      {isHabitCompleted(habitId) ? (
+        <Text style={{color: "#fff", fontWeight: "bold"}}>Completed</Text>
+      ) : (
+        <MaterialCommunityIcons name="check-circle-outline" size={32} color="#fff" />
+      )}
     </View>
   );
   
@@ -230,7 +275,7 @@ export default function Index() {
                 key={key}
                 overshootLeft={false}
                 overshootRight={false}
-                renderRightActions={renderRightActions}
+                renderRightActions={() => renderRightActions(habit.$id)}
                 renderLeftActions={renderLeftActions}
                 onSwipeableOpen={(direction) => {
                   if (direction === 'left') {
@@ -241,7 +286,7 @@ export default function Index() {
                   swipeableRefs.current[habit.$id]?.close();
                 }}
                 >
-              <Surface style={styles.card} elevation={0}>
+              <Surface style={[styles.card, isHabitCompleted(habit.$id) && styles.completedCard]} elevation={0}>
                 <View style={styles.cardContent}>
                   <Text variant="bodyMedium" style={styles.cardTitle}>{habit.title}</Text>
                   
@@ -293,6 +338,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.08,
     shadowRadius: 8,
     elevation: 4,
+  },
+  completedCard: {
+    opacity: 0.6,
   },
   cardContent: {
     padding: 20,

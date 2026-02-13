@@ -10,3 +10,9 @@ export interface Habit extends Models.Row {
     last_completed: string;
     created_at: string;
 }
+
+export interface HabitCompletion extends Models.Row {
+    habit_id: string;
+    user_id: string;
+    completed_at: string;
+}
